@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PATHFORGE — branching map &amp; decision-tree builder</title>
+<style>
+:root{--tarmac:#17141b;--panel:#221d2b;--cream:#f0e7d3;--cream-dim:#b9ae95;--purple:#8a5cf6;--heat:#e3492b;--stress:#d8c23a;--line:#4a3f63;
+      --ink:#333244;--gold:#c8a86b;--teal:#5cc8a8;--blue:#3fa7d6}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--tarmac);color:var(--cream);font-family:"Avenir Next Condensed","Arial Narrow",system-ui,sans-serif;padding:14px}
+h1{font-size:20px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px}
+.sub{color:var(--cream-dim);font-size:13px;margin-bottom:12px;max-width:1200px}
+#tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+#tabs button{padding:8px 14px;border-radius:8px;border:2px solid #4a3f63;background:var(--panel);color:var(--cream);font:inherit;font-size:14px;letter-spacing:1px;text-transform:uppercase;cursor:pointer}
+#tabs button.sel{border-color:var(--purple);background:#3a2a5e;box-shadow:0 0 8px rgba(138,92,246,.4)}
+#tabs button.newmap{border-color:#3fa7d6;color:#bfe6f7}
+
+/* ---------- mode bar ---------- */
+#modebar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;max-width:1200px}
+.pbtn{padding:7px 11px;border-radius:7px;border:2px solid #4a3f63;background:#12101a;color:var(--cream-dim);
+  font:inherit;font-size:12px;letter-spacing:.6px;text-transform:uppercase;cursor:pointer}
+.pbtn:hover{border-color:#6d5c92}
+.pbtn.sel{border-color:var(--purple);background:#3a2a5e;color:var(--cream);box-shadow:0 0 8px rgba(138,92,246,.4)}
+.pbtn.sel[data-m="add"]{border-color:var(--teal);background:#12463a;color:#eafff8;box-shadow:0 0 8px rgba(92,200,168,.5)}
+.pbtn.sel[data-m="link"]{border-color:var(--blue);background:#123a4d;color:#dff2fd;box-shadow:0 0 8px rgba(63,167,214,.5)}
+.pbtn.sel[data-m="erase"]{border-color:var(--heat);background:#3a1f1c;color:#ffd2c6;box-shadow:0 0 8px rgba(227,73,43,.5)}
+.pbtn.sel[data-m="play"]{border-color:var(--gold);background:#3a3020;color:#f7ead0;box-shadow:0 0 8px rgba(200,168,107,.5)}
+#modebar .gap{flex:0 0 10px}
+#modebar button.act{padding:7px 11px;border-radius:7px;border:2px solid #4a3f63;background:var(--panel);color:var(--cream);font:inherit;font-size:12px;letter-spacing:.6px;text-transform:uppercase;cursor:pointer}
+#modebar button.act:hover{background:#3a2a5e}
+#modebar button.act:disabled{opacity:.35;cursor:default}
+
+/* ---------- palettes ---------- */
+#palette{display:none;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px;max-width:1200px}
+#palette.on{display:flex}
+.tbtn{display:flex;align-items:center;gap:6px;padding:5px 9px 5px 6px;border-radius:7px;border:2px solid #4a3f63;background:#12101a;color:var(--cream-dim);
+  font:inherit;font-size:12px;letter-spacing:.5px;cursor:pointer}
+.tbtn svg{display:block}
+.tbtn.sel{border-color:var(--teal);background:#12463a;color:#eafff8;box-shadow:0 0 8px rgba(92,200,168,.45)}
+.tbtn.linksel.sel{border-color:var(--blue);background:#123a4d;color:#dff2fd;box-shadow:0 0 8px rgba(63,167,214,.45)}
+
+/* ---------- board ---------- */
+#svgwrap{background:#2a2620;border-radius:10px;overflow:hidden;border:1px solid #000;max-width:1200px;touch-action:manipulation;position:relative}
+svg#board{display:block;width:100%;height:auto;touch-action:manipulation}
+svg#board.locked{touch-action:pinch-zoom}
+#svgwrap.locked{outline:2px solid var(--purple);outline-offset:-2px}
+svg#board.linkdraw{touch-action:none}
+#svgwrap.linkdraw{outline:2px solid var(--blue);outline-offset:-2px}
+.node{cursor:pointer}
+.node.seln{cursor:grab;touch-action:none}
+.node.seln:active{cursor:grabbing}
+.edgehit{cursor:pointer}
+
+#legend{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0;font-size:12px;color:var(--cream-dim);align-items:center;max-width:1200px}
+#legend span{display:flex;align-items:center;gap:5px}
+#legend svg{display:block}
+
+#report{max-width:1200px;background:var(--panel);border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.55;margin-top:10px}
+#report b{color:var(--stress)}
+#report .ok{color:#8ecf6a}
+#report .warn{color:var(--heat)}
+#exportbox{width:100%;max-width:1200px;margin-top:8px;background:#12101a;color:#cfe3b8;border:1px solid #333;border-radius:8px;padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;line-height:1.5;display:none;white-space:pre}
+
+/* ---------- panel cards ---------- */
+#builder{max-width:1200px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.bgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.bcard{background:#1a1622;border:1px solid #3a3247;border-radius:8px;padding:10px}
+.bcard h3{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--purple);margin-bottom:8px;font-weight:800}
+.f{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:12px;color:var(--cream-dim)}
+.f label{flex:0 0 84px;text-transform:uppercase;letter-spacing:.6px;font-size:10px}
+.f input[type=text],.f input[type=number],.f select,.f textarea{flex:1;min-width:0;background:#12101a;border:1px solid #3a3247;border-radius:6px;color:var(--cream);font:inherit;font-size:13px;padding:5px 7px}
+.f textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;resize:vertical}
+.f input:focus,.f select:focus,.f textarea:focus{outline:2px solid var(--purple);outline-offset:1px}
+.f input[type=range]{accent-color:var(--purple)}
+.hint{font-size:11px;color:#7e7490;line-height:1.5;margin-top:6px}
+.btn{padding:6px 10px;border-radius:7px;border:2px solid var(--purple);background:#2a2237;color:var(--cream);font:inherit;font-size:12px;letter-spacing:1px;text-transform:uppercase;cursor:pointer}
+.btn:hover{background:#3a2a5e}
+.btn.ghost{border-color:#4a3f63}
+.btn.go{border-color:#3fa7d6;background:#123a4d;color:#d6f0fb}
+.btn.go:hover{background:#18506b}
+.btn.gold{border-color:#c8a86b;background:#3a3020;color:#f7ead0}
+.btn.gold:hover{background:#4d3f22}
+.btn.danger{border-color:#5a2f2a;color:#ffb199}
+.btn.danger:hover{background:#3a1f1c}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.brow{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.wgrid{display:grid;grid-template-columns:auto 1fr 34px;gap:5px 8px;align-items:center;font-size:11px;color:var(--cream-dim)}
+.wgrid label{text-transform:uppercase;letter-spacing:.5px;font-size:10px}
+.wgrid output{text-align:right;color:var(--cream)}
+</style>
+</head>
+<body>
+<h1>PATHFORGE — branching map builder</h1>
+<div class="sub">Build <b>Slay-the-Spire / Inscryption-style</b> branching maps: place nodes, join them with <b>roads, rails, dirt, brick, stairs or ladders</b>, paint the board with a terrain, drop in an <b>avatar</b> and tap nodes to walk it round the map — then export clean JSON (or a paste-in JS block) for your game. Everything autosaves in this browser. <b style="color:#bfe6f7">＋ New map</b> adds another tab.</div>
+<div id="tabs"></div>
+
+<div id="builder">
+  <div class="bgrid">
+
+    <div class="bcard">
+      <h3>Map</h3>
+      <div class="f"><label>Name</label><input type="text" id="m_name"></div>
+      <div class="f"><label>Key</label><input type="text" id="m_key"></div>
+      <div class="f"><label>Board W×H</label><input type="number" id="m_w" min="400" max="4000" step="50"><input type="number" id="m_h" min="400" max="6000" step="50"></div>
+      <div class="f"><label>Terrain</label><select id="m_terrain"></select></div>
+      <div class="f"><label>Paths drawn</label><select id="m_pstyle"></select></div>
+      <div class="f"><label>Direction</label><select id="m_dir">
+        <option value="up">Bottom → top (Slay the Spire)</option>
+        <option value="right">Left → right (Inscryption)</option>
+      </select></div>
+      <div class="f"><label>Floors</label><input type="number" id="m_floors" min="2" max="30" step="1"></div>
+      <div class="f"><label>Snap</label><select id="m_snap">
+        <option value="floor">Snap to floor lanes</option>
+        <option value="grid">Snap to floor + column grid</option>
+        <option value="free">Free placement</option>
+      </select></div>
+      <div class="f"><label>Guides</label><select id="m_guides">
+        <option value="on">Show floor guides</option>
+        <option value="off">Hide floor guides</option>
+      </select></div>
+      <div class="hint"><b>Paths drawn</b> is the surface every <i>new</i> link and the generator use — tap an existing link to restyle just that one. <b>Floors</b> are the rungs of the map; nodes keep their spots and re-attach to the nearest lane when it changes.</div>
+      <div class="brow">
+        <button class="btn danger" id="m_clear">Clear nodes</button>
+        <button class="btn danger" id="m_delete">Remove this map</button>
+      </div>
+    </div>
+
+    <div class="bcard">
+      <h3>Generator</h3>
+      <div class="f"><label>Columns</label><input type="number" id="g_lanes" min="2" max="9" step="1" value="7"></div>
+      <div class="f"><label>Paths</label><input type="number" id="g_paths" min="1" max="9" step="1" value="6"></div>
+      <div class="wgrid" id="g_weights"></div>
+      <div class="f" style="margin-top:6px"><label>Treasure floor</label><input type="number" id="g_tfloor" min="-1" step="1" value="8"></div>
+      <div class="f"><label>Elites from</label><input type="number" id="g_elmin" min="0" step="1" value="5"></div>
+      <div class="f"><label style="flex:0 0 auto">Rest below boss</label><input type="checkbox" id="g_restpre" checked style="flex:0 0 auto"></div>
+      <div class="f"><label style="flex:0 0 auto">Start node</label><input type="checkbox" id="g_start" style="flex:0 0 auto"></div>
+      <div class="f"><label style="flex:0 0 auto">Boss node</label><input type="checkbox" id="g_boss" checked style="flex:0 0 auto"></div>
+      <div class="brow"><button class="btn go" id="g_gen">Generate map</button></div>
+      <div class="hint">Walks <b>Paths</b> random routes up the floors (paths can share nodes but never cross, same as Slay the Spire), then deals out node types by the sliders. Links come out in the map's <b>Paths drawn</b> surface. Generating replaces the current nodes — <b>Undo</b> gets the old map back.</div>
+    </div>
+
+    <div class="bcard">
+      <h3>Avatar</h3>
+      <div class="f"><label>Avatar</label><select id="a_type"></select></div>
+      <div class="f"><label>Speed</label><input type="range" id="a_speed" min="60" max="420" step="10"><output id="a_speedo" style="flex:0 0 34px;text-align:right;color:var(--cream)"></output></div>
+      <div class="brow" style="margin-top:2px">
+        <button class="btn gold" id="a_place">Place at entry</button>
+        <button class="btn ghost" id="a_remove">Take off board</button>
+      </div>
+      <div class="hint">In <b style="color:#f7ead0">▶ Play test</b>, tap any node and the avatar <b>walks the paths</b> to it — forwards along the arrows if it can, backtracking if it must. In <b>Select</b> mode, pick a node and hit <b>Send avatar here</b>. The avatar and its position are saved with the map.</div>
+    </div>
+
+    <div class="bcard">
+      <h3>Selected node</h3>
+      <div id="nodecard">
+        <div class="f"><label>Id</label><input type="text" id="n_id" readonly></div>
+        <div class="f"><label>Type</label><select id="n_type"></select></div>
+        <div class="f"><label>Label</label><input type="text" id="n_label" placeholder="optional — e.g. Gremlin Nob"></div>
+        <div class="f"><label>Floor</label><input type="number" id="n_floor" min="0" step="1"></div>
+        <div class="f"><label>x / y</label><input type="number" id="n_x" step="1"><input type="number" id="n_y" step="1"></div>
+        <div class="f"><label>Data</label><textarea id="n_data" rows="3" placeholder='free JSON — e.g. {"gold":25,"enemyPool":"act1"}'></textarea></div>
+        <div class="brow">
+          <button class="btn gold" id="n_walk">Send avatar here</button>
+          <button class="btn ghost" id="n_dupe">Duplicate</button>
+          <button class="btn danger" id="n_del">Delete node</button>
+        </div>
+      </div>
+      <div class="hint" id="nodehint">Tap a node on the board to edit it here. While it's selected, drag it with one finger (the board won't scroll), or nudge it with the <b>arrow keys</b>. Tap a link to select the link instead.</div>
+      <div class="f" style="margin-top:6px"><label>Link surface</label><select id="e_style" disabled></select></div>
+      <div class="brow"><button class="btn danger" id="e_del" disabled>Delete link</button><button class="btn ghost" id="e_flip" disabled>Flip direction</button></div>
+    </div>
+
+    <div class="bcard">
+      <h3>Export &amp; import</h3>
+      <div class="brow" style="margin-top:0">
+        <button class="btn go" id="x_json">Export JSON</button>
+        <button class="btn go" id="x_js">Export JS block</button>
+        <button class="btn ghost" id="x_copy">Copy</button>
+        <button class="btn ghost" id="x_dl">Download .json</button>
+        <button class="btn ghost" id="x_png">Save PNG</button>
+      </div>
+      <div class="brow">
+        <button class="btn ghost" id="x_pick">Import file…</button>
+        <input type="file" id="x_file" accept=".json,application/json" style="display:none">
+        <button class="btn ghost" id="x_frombox">Import from box</button>
+      </div>
+      <div class="hint">JSON gives you <code>{nodes:[…], edges:[[from,to,surface?],…]}</code> — ids are stable strings, edges always point start → boss, and the surface is only written when it isn't the plain trail. The JS block is the same data as a paste-in <code>const</code>. <b>Import</b> accepts a single map or a whole <code>{maps:{…}}</code> bundle; the export box is editable, so paste JSON in and hit <b>Import from box</b>.</div>
+    </div>
+
+  </div>
+</div>
+
+<div id="modebar">
+  <button class="pbtn sel" data-m="move">✥ Select / move</button>
+  <button class="pbtn" data-m="add">＋ Add nodes</button>
+  <button class="pbtn" data-m="link">⌁ Link</button>
+  <button class="pbtn" data-m="erase">✕ Erase</button>
+  <button class="pbtn" data-m="play">▶ Play test</button>
+  <span class="gap"></span>
+  <button class="act" id="btnundo" title="Ctrl-Z works too">↺ Undo</button>
+  <span class="gap"></span>
+  <span id="modestat" style="font-size:11px;color:#7e7490"></span>
+</div>
+<div id="palette"></div>
+
+<div id="svgwrap"><svg id="board"></svg></div>
+<div id="legend"></div>
+<div id="report"></div>
+<textarea id="exportbox" rows="12" spellcheck="false"></textarea>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const snap = o => JSON.parse(JSON.stringify(o));
+const SVGNS = "http://www.w3.org/2000/svg";
+
+/* ============================================================
+   NODE TYPES — colour, size, and a hand-drawn SVG icon each
+   ============================================================ */
+const TYPES = {
+  start:   {name:"Start",    r:16, ink:"#2f4a5e"},
+  enemy:   {name:"Enemy",    r:14, ink:"#333244"},
+  elite:   {name:"Elite",    r:20, ink:"#4a2333"},
+  event:   {name:"Event ?",  r:14, ink:"#333244"},
+  merchant:{name:"Merchant", r:15, ink:"#3d3524"},
+  treasure:{name:"Treasure", r:15, ink:"#584418"},
+  rest:    {name:"Rest",     r:15, ink:"#4a2f1a"},
+  boss:    {name:"Boss",     r:26, ink:"#521f1f"}
+};
+const TYPE_KEYS = Object.keys(TYPES);
+
+function iconMarkup(type, ink, paper){
+  ink = ink || TYPES[type].ink; paper = paper || "#cfc7b4";
+  switch(type){
+    case "enemy": case "elite": {
+      const horn = type==="elite" ? "M-6,-6 Q-13,-10 -12,-18 Q-7,-13 -4,-9 Z M6,-6 Q13,-10 12,-18 Q7,-13 4,-9 Z"
+                                  : "M-5,-6 Q-10,-9 -9,-15 Q-5,-11 -3,-8 Z M5,-6 Q10,-9 9,-15 Q5,-11 3,-8 Z";
+      return `<path d="${horn}" fill="${ink}"/>`+
+             `<circle cx="0" cy="0" r="8.5" fill="${ink}"/>`+
+             `<circle cx="-3.2" cy="-2" r="1.7" fill="${paper}"/>`+
+             `<circle cx="3.2" cy="-2" r="1.7" fill="${paper}"/>`+
+             `<path d="M-5,3 L-3,5.2 L-1.2,3.4 L0,5.4 L1.2,3.4 L3,5.2 L5,3 L5,4.4 Q0,8.4 -5,4.4 Z" fill="${paper}"/>`;
+    }
+    case "boss":
+      return `<path d="M-7,-7 Q-15,-11 -14,-20 Q-8,-15 -5,-10 Z M7,-7 Q15,-11 14,-20 Q8,-15 5,-10 Z M0,-9 L-2,-17 L0,-13 L2,-17 Z" fill="${ink}"/>`+
+             `<circle cx="0" cy="0" r="9.5" fill="${ink}"/>`+
+             `<circle cx="-3.5" cy="-2.2" r="2" fill="#e3492b"/>`+
+             `<circle cx="3.5" cy="-2.2" r="2" fill="#e3492b"/>`+
+             `<path d="M-6,3 L-4,5.6 L-2,3.4 L0,6 L2,3.4 L4,5.6 L6,3 L6,4.8 Q0,9.4 -6,4.8 Z" fill="${paper}"/>`;
+    case "event":
+      return `<circle cx="0" cy="0" r="9.5" fill="none" stroke="${ink}" stroke-width="1.6" stroke-dasharray="2.6 2.2"/>`+
+             `<text x="0" y="4.6" text-anchor="middle" font-family="Georgia,serif" font-weight="bold" font-size="14" fill="${ink}">?</text>`;
+    case "merchant":
+      return `<path d="M-2.6,-8.6 Q0,-10.4 2.6,-8.6 L1.8,-6.2 L-1.8,-6.2 Z" fill="${ink}"/>`+
+             `<path d="M-2,-6.4 L2,-6.4 Q8,-3.5 7.2,3 Q6.4,8.6 0,8.8 Q-6.4,8.6 -7.2,3 Q-8,-3.5 -2,-6.4 Z" fill="${ink}"/>`+
+             `<text x="0" y="5.4" text-anchor="middle" font-family="Georgia,serif" font-weight="bold" font-size="9.5" fill="${paper}">$</text>`;
+    case "treasure":
+      return `<path d="M-8,-2 Q-8,-8 0,-8 Q8,-8 8,-2 Z" fill="${ink}"/>`+
+             `<rect x="-8" y="-1.6" width="16" height="9" rx="1.4" fill="${ink}"/>`+
+             `<rect x="-8" y="-2.4" width="16" height="1.6" fill="${paper}" opacity=".5"/>`+
+             `<circle cx="0" cy="1.6" r="1.9" fill="${paper}"/><rect x="-.9" y="1.8" width="1.8" height="3.4" fill="${paper}"/>`;
+    case "rest":
+      return `<path d="M0,-9 Q3.6,-4.4 1.6,-1.8 Q5.4,-3.6 5.2,-7 Q9,-1.6 6,2.6 Q2.6,7 -2.6,5.6 Q-7.6,4 -6.6,-1.8 Q-6,-5 -3,-7 Q-3.6,-3.4 -1.6,-2.2 Q-2.4,-6 0,-9 Z" fill="${ink}"/>`+
+             `<path d="M-9,7 L9,9.6 M-9,9.6 L9,7" stroke="${ink}" stroke-width="2" stroke-linecap="round"/>`;
+    case "start":
+      return `<circle cx="0" cy="0" r="9" fill="none" stroke="${ink}" stroke-width="2"/>`+
+             `<path d="M0,-4.6 L4,3.4 L-4,3.4 Z" fill="${ink}"/>`;
+  }
+  return "";
+}
+function miniIcon(type, px){
+  px = px || 22;
+  return `<svg width="${px}" height="${px}" viewBox="-13 -13 26 26">${iconMarkup(type, TYPES[type].ink, "#cfc7b4")}</svg>`;
+}
+
+/* ============================================================
+   PATH SURFACES — how a link is drawn
+   ============================================================ */
+const PATH_STYLES = {
+  trail:  {name:"Trail"},
+  road:   {name:"Road"},
+  rail:   {name:"Train track"},
+  dirt:   {name:"Dirt path"},
+  brick:  {name:"Brick path"},
+  stairs: {name:"Stairs"},
+  ladder: {name:"Ladder"}
+};
+const eStyle = e => (e[2] && PATH_STYLES[e[2]]) ? e[2] : "trail";
+
+function perpTicks(x1,y1,x2,y2,spacing,half){
+  const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy)||1, ux=dx/len, uy=dy/len, px=-uy, py=ux;
+  let d="";
+  for(let s=spacing*0.6; s<len; s+=spacing){
+    const cx=x1+ux*s, cy=y1+uy*s;
+    d+=`M${(cx-px*half).toFixed(1)},${(cy-py*half).toFixed(1)}L${(cx+px*half).toFixed(1)},${(cy+py*half).toFixed(1)}`;
+  }
+  return d;
+}
+function offLine(x1,y1,x2,y2,o){
+  const dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy)||1, px=-dy/len*o, py=dx/len*o;
+  return [x1+px,y1+py,x2+px,y2+py];
+}
+const L = (c,attrs) => { let s=`<line x1="${c[0].toFixed(1)}" y1="${c[1].toFixed(1)}" x2="${c[2].toFixed(1)}" y2="${c[3].toFixed(1)}"`; for(const k in attrs) s+=` ${k}="${attrs[k]}"`; return s+"/>"; };
+
+function edgeStyleMarkup(style,x1,y1,x2,y2){
+  const c=[x1,y1,x2,y2];
+  switch(style){
+    case "road":
+      return L(c,{stroke:"#3f3f47","stroke-width":10,"stroke-linecap":"round"})+
+             L(c,{stroke:"#d8d0bd","stroke-width":1.8,"stroke-dasharray":"9 9","stroke-linecap":"butt",opacity:.9});
+    case "rail":
+      return `<path d="${perpTicks(x1,y1,x2,y2,10,6)}" stroke="#6b543a" stroke-width="2.8" fill="none"/>`+
+             L(offLine(x1,y1,x2,y2,-3),{stroke:"#55504a","stroke-width":1.8})+
+             L(offLine(x1,y1,x2,y2, 3),{stroke:"#55504a","stroke-width":1.8});
+    case "dirt":
+      return L(c,{stroke:"#8a6a44","stroke-width":6,"stroke-dasharray":"13 7","stroke-linecap":"round",opacity:.85})+
+             L(c,{stroke:"#a5834f","stroke-width":2.6,"stroke-dasharray":"3 10","stroke-linecap":"round","stroke-dashoffset":6});
+    case "brick":
+      return L(c,{stroke:"#7d4438","stroke-width":9,"stroke-linecap":"butt"})+
+             `<path d="${perpTicks(x1,y1,x2,y2,8,4.4)}" stroke="#c8ab90" stroke-width="1.3" fill="none" opacity=".85"/>`;
+    case "stairs":
+      return L(offLine(x1,y1,x2,y2,-7),{stroke:"#6a6155","stroke-width":2})+
+             L(offLine(x1,y1,x2,y2, 7),{stroke:"#6a6155","stroke-width":2})+
+             `<path d="${perpTicks(x1,y1,x2,y2,9,7)}" stroke="#6a6155" stroke-width="3" fill="none"/>`;
+    case "ladder":
+      return L(offLine(x1,y1,x2,y2,-4),{stroke:"#7a5c33","stroke-width":2.4})+
+             L(offLine(x1,y1,x2,y2, 4),{stroke:"#7a5c33","stroke-width":2.4})+
+             `<path d="${perpTicks(x1,y1,x2,y2,8,4)}" stroke="#7a5c33" stroke-width="2.2" fill="none"/>`;
+    default: /* trail */
+      return L(c,{stroke:"#4b4a58","stroke-width":3.5,"stroke-linecap":"round","stroke-dasharray":"0.1 11",opacity:.9});
+  }
+}
+function miniPath(style, w){
+  w = w||40;
+  return `<svg width="${w}" height="16" viewBox="0 0 ${w} 16">${edgeStyleMarkup(style,3,8,w-3,8)}</svg>`;
+}
+
+/* ============================================================
+   TERRAINS — background gradient + scattered scenery
+   ============================================================ */
+const TERRAINS = {
+  parchment:{name:"Parchment", g:["#d2cab6","#c6bda8","#b3a98f"], frame:"#8e8468", guide:"#9a8f74", label:"#8a7f64", paper:"#cfc7b4", text:"#5a5340"},
+  mountains:{name:"Mountains", g:["#c0ccd6","#a7b5c1","#87959f"], frame:"#5f6c78", guide:"#71808c", label:"#54626e", paper:"#e6ecf1", text:"#3f4c58"},
+  desert:   {name:"Desert",    g:["#ead394","#dcc084","#c2a164"], frame:"#8d7444", guide:"#a1854e", label:"#84693a", paper:"#f4e7c0", text:"#6c5528"},
+  forest:   {name:"Forest",    g:["#b7c99e","#9dba86","#7c9c6c"], frame:"#4f6b43", guide:"#68855a", label:"#465f3d", paper:"#e2ead2", text:"#374d30"},
+  jungle:   {name:"Jungle",    g:["#93b077","#71a061","#4e7d49"], frame:"#2f5330", guide:"#3f6b42", label:"#274527", paper:"#dcead0", text:"#1f3a20"},
+  arctic:   {name:"Arctic",    g:["#eef4f8","#d8e5ee","#b9cedb"], frame:"#7d97a8", guide:"#8ea8b9", label:"#6a8699", paper:"#ffffff", text:"#4a6578"},
+  urban:    {name:"Urban",     g:["#b0b4b9","#999da3","#7d8288"], frame:"#4c5157", guide:"#5c6167", label:"#3f444a", paper:"#dde1e6", text:"#2e3338"},
+  farm:     {name:"Farm",      g:["#dade9e","#c4d08a","#a5bb75"], frame:"#6f7c3e", guide:"#7f8c48", label:"#5c6a30", paper:"#f0f1d2", text:"#4a5626"}
+};
+const TER = m => TERRAINS[m.terrain] || TERRAINS.parchment;
+
+function hashStr(s){ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+function rngOf(seed){ let s=seed>>>0; return ()=>{ s=(s+0x6D2B79F5)|0; let t=Math.imul(s^s>>>15,1|s); t=(t+Math.imul(t^t>>>7,61|t))^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+
+function terrainDeco(m){
+  const R = rngOf(hashStr(m.key+"|"+m.terrain)), W=m.w, H=m.h;
+  const n = Math.round(W*H/70000)+4;
+  let s = "";
+  const px=(pad)=>pad+R()*(W-2*pad), py=(pad)=>pad+R()*(H-2*pad);
+  switch(m.terrain){
+    case "mountains":
+      for(let i=0;i<n;i++){ const x=px(60),y=py(80),w=34+R()*70,h=w*(.8+R()*.5);
+        s+=`<g opacity="${(.2+R()*.18).toFixed(2)}"><path d="M${x-w},${y} L${x},${y-h} L${x+w},${y} Z" fill="#75828f"/>`+
+           `<path d="M${x-w*.32},${y-h*.62} L${x},${y-h} L${x+w*.32},${y-h*.62} L${x+w*.14},${y-h*.5} L${x},${y-h*.6} L${x-w*.14},${y-h*.5} Z" fill="#eef2f6"/></g>`; }
+      break;
+    case "desert":
+      for(let i=0;i<n;i++){ const x=px(60),y=py(60),w=50+R()*90,h=8+R()*14;
+        s+=`<path d="M${x-w},${y} Q${x},${y-h*2} ${x+w},${y}" fill="none" stroke="#b8934f" stroke-width="2.5" opacity="${(.25+R()*.2).toFixed(2)}"/>`; }
+      for(let i=0;i<Math.max(2,n>>2);i++){ const x=px(70),y=py(90);
+        s+=`<g opacity=".4" stroke="#5f7a3a" stroke-width="4" stroke-linecap="round" fill="none">`+
+           `<path d="M${x},${y} L${x},${y-22} M${x},${y-12} q-9,-2 -9,-12 M${x},${y-15} q9,-2 9,-11"/></g>`; }
+      break;
+    case "forest":
+      for(let i=0;i<n+4;i++){ const x=px(50),y=py(60),h=26+R()*30;
+        s+=`<g opacity="${(.28+R()*.2).toFixed(2)}"><path d="M${x},${y-h} L${x-h*.42},${y-h*.3} L${x+h*.42},${y-h*.3} Z M${x},${y-h*.66} L${x-h*.52},${y} L${x+h*.52},${y} Z" fill="#3f6f4a"/>`+
+           `<rect x="${x-2}" y="${y}" width="4" height="${h*.18}" fill="#5c4630"/></g>`; }
+      break;
+    case "jungle":
+      for(let i=0;i<n+4;i++){ const x=px(50),y=py(60),r=14+R()*20,a=R()*180;
+        s+=`<g opacity="${(.24+R()*.2).toFixed(2)}" fill="#2f5535" transform="rotate(${a.toFixed(0)} ${x} ${y})">`+
+           `<ellipse cx="${x}" cy="${y}" rx="${r}" ry="${r*.36}"/><ellipse cx="${x}" cy="${y}" rx="${r*.36}" ry="${r}"/>`+
+           `<ellipse cx="${x}" cy="${y}" rx="${r*.8}" ry="${r*.3}" transform="rotate(45 ${x} ${y})"/></g>`; }
+      break;
+    case "arctic":
+      for(let i=0;i<n;i++){ const x=px(60),y=py(60),w=30+R()*60;
+        s+=`<path d="M${x-w},${y} L${x-w*.5},${y-10-R()*10} L${x},${y} L${x+w*.5},${y-8-R()*12} L${x+w},${y}" fill="none" stroke="#ffffff" stroke-width="2.5" opacity="${(.4+R()*.3).toFixed(2)}"/>`; }
+      for(let i=0;i<n*2;i++) s+=`<circle cx="${px(40).toFixed(0)}" cy="${py(40).toFixed(0)}" r="1.6" fill="#ffffff" opacity=".55"/>`;
+      break;
+    case "urban":
+      for(let i=0;i<n+3;i++){ const x=px(70),y=py(90),w=22+R()*26,h=36+R()*60;
+        s+=`<g opacity="${(.22+R()*.15).toFixed(2)}"><rect x="${x-w/2}" y="${y-h}" width="${w}" height="${h}" fill="#4e545b"/>`;
+        for(let wy=y-h+7; wy<y-6; wy+=11) for(let wx=x-w/2+5; wx<x+w/2-4; wx+=9)
+          if(R()>.35) s+=`<rect x="${wx}" y="${wy}" width="4" height="5" fill="#cfd7de"/>`;
+        s+=`</g>`; }
+      break;
+    case "farm":
+      for(let i=0;i<Math.max(3,n>>1);i++){ const y=py(80),h=26+R()*40;
+        s+=`<rect x="30" y="${y}" width="${W-60}" height="${h}" fill="#8fa758" opacity=".16"/>`; }
+      for(let i=0;i<n;i++){ const x=px(70),y=py(80),w=44+R()*40;
+        s+=`<g stroke="#7a6236" stroke-width="2.4" opacity=".45">`+
+           L([x-w/2,y,x+w/2,y],{})+L([x-w/2,y-7,x+w/2,y-7],{});
+        for(let fx=x-w/2; fx<=x+w/2; fx+=14) s+=L([fx,y+3,fx,y-11],{});
+        s+=`</g>`; }
+      s+=`<g opacity=".5"><rect x="${(W*.82).toFixed(0)}" y="60" width="34" height="24" fill="#a34a3a"/><path d="M${(W*.82-4).toFixed(0)},60 L${(W*.82+17).toFixed(0)},44 L${(W*.82+38).toFixed(0)},60 Z" fill="#7d3428"/></g>`;
+      break;
+  }
+  return s;
+}
+
+/* ============================================================
+   AVATARS
+   ============================================================ */
+const AVATARS = {
+  none:  {name:"— none —"},
+  person:{name:"Person"},
+  knight:{name:"Knight"},
+  car:   {name:"Car"},
+  horse: {name:"Horse & rider"}
+};
+function avatarMarkup(type){
+  const ink="#2b2a38", hi="#f0e7d3";
+  switch(type){
+    case "person":
+      return `<circle cx="2.5" cy="-8" r="3.4" fill="${ink}"/>`+
+             `<path d="M2.5,-4.6 L.6,2" stroke="${ink}" stroke-width="2.8" stroke-linecap="round"/>`+
+             `<path d="M.6,2 L-3.4,9.4 M.6,2 L4.8,9.2" stroke="${ink}" stroke-width="2.5" stroke-linecap="round"/>`+
+             `<path d="M2,-2.6 L-2.4,2.2 M2,-2.6 L6.6,.6" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/>`+
+             `<path d="M6.6,.6 L7.4,-10" stroke="#7a5c33" stroke-width="1.8"/>`;
+    case "knight":
+      return `<path d="M-1,-11.6 Q2.5,-13.4 6,-11.6 L6,-7.6 Q2.5,-5.8 -1,-7.6 Z" fill="${ink}"/>`+
+             `<rect x="1.2" y="-9.6" width="2.6" height="1.4" fill="${hi}"/>`+
+             `<path d="M2.5,-11.8 Q6.5,-15.5 9.5,-13.5" stroke="#a03a2e" stroke-width="2" fill="none"/>`+
+             `<path d="M2.5,-5.6 L.8,2.2" stroke="${ink}" stroke-width="3" stroke-linecap="round"/>`+
+             `<path d="M.8,2.2 L-3,9.4 M.8,2.2 L4.8,9.2" stroke="${ink}" stroke-width="2.5" stroke-linecap="round"/>`+
+             `<ellipse cx="-3.4" cy="-1.2" rx="3" ry="4" fill="#6b5433" stroke="${ink}" stroke-width="1"/>`+
+             `<path d="M4.4,-2.4 L9.8,-8.4" stroke="#9aa2ab" stroke-width="1.8"/>`;
+    case "car":
+      return `<path d="M-11,3.4 L-11,-.6 Q-11,-3.6 -7.4,-3.6 L-4.4,-3.6 L-1.4,-8 L5.6,-8 L8.8,-3.6 Q11,-3 11,-.2 L11,3.4 Z" fill="#a03a2e"/>`+
+             `<path d="M-3.4,-3.8 L-1,-7 L5,-7 L7.2,-3.8 Z" fill="${hi}" opacity=".85"/>`+
+             `<circle cx="-6" cy="3.6" r="3.1" fill="${ink}"/><circle cx="-6" cy="3.6" r="1.2" fill="${hi}"/>`+
+             `<circle cx="6.4" cy="3.6" r="3.1" fill="${ink}"/><circle cx="6.4" cy="3.6" r="1.2" fill="${hi}"/>`;
+    case "horse":
+      return `<path d="M-9,1 Q-10,-4 -6,-4 L4,-4 Q7,-4 8,-7 L9.4,-10 L11.6,-9.4 L10.6,-5.4 Q10,-2.4 7,-1.6 L6.6,1 Z" fill="#6b4a2e"/>`+
+             `<path d="M-8,1 L-9,8.6 M-4.6,1 L-4.4,8.6 M4,1 L3.4,8.6 M7,0 L8.4,8.4" stroke="#6b4a2e" stroke-width="2" stroke-linecap="round"/>`+
+             `<path d="M-9.4,-3.6 Q-12.4,-1 -11.6,3.4" stroke="#4d341f" stroke-width="1.8" fill="none"/>`+
+             `<circle cx="-.4" cy="-9.4" r="2.6" fill="#2b2a38"/>`+
+             `<path d="M-.4,-7 L-1.2,-4" stroke="#2b2a38" stroke-width="2.4" stroke-linecap="round"/>`;
+  }
+  return "";
+}
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const STORE = "pathforge_maps_v2";
+let MAPS = {}, CUR = null;
+let mode = "move";
+let addType = "enemy";
+let selNode = null, selEdge = null;
+let linkFrom = null;
+let drag = null;
+let rubber = null;
+let PLAY = null;
+let ANIM = null;               // {pts:[[x,y]…], seg, dist, target, total}
+const UNDO = {};
+
+function freshMap(key, name){
+  return {key, name:name||key, w:1000, h:1400, dir:"up", floors:16,
+          terrain:"parchment", pathStyle:"trail",
+          snapMode:"floor", guides:"on", nextId:1,
+          avatar:{type:"none", at:null, speed:170},
+          gen:{lanes:7, paths:6, tfloor:8, elmin:5, restpre:true, start:false, boss:true,
+               weights:{enemy:45, event:22, merchant:10, rest:12, elite:8, treasure:3}},
+          nodes:[], edges:[]};
+}
+function normMap(m){
+  const d = freshMap(m.key||"map");
+  for(const k in d) if(m[k]===undefined) m[k]=d[k];
+  if(!TERRAINS[m.terrain]) m.terrain="parchment";
+  if(!PATH_STYLES[m.pathStyle]) m.pathStyle="trail";
+  m.avatar = Object.assign(snap(d.avatar), m.avatar||{});
+  if(!AVATARS[m.avatar.type]) m.avatar.type="none";
+  m.gen = Object.assign(snap(d.gen), m.gen||{});
+  m.gen.weights = Object.assign(snap(d.gen.weights), (m.gen.weights)||{});
+  m.nodes = (m.nodes||[]).map(n=>({id:String(n.id), type:TYPES[n.type]?n.type:"enemy",
+    label:n.label||"", floor:+n.floor||0, x:+n.x||0, y:+n.y||0, data:n.data!==undefined?n.data:null}));
+  const ids = new Set(m.nodes.map(n=>n.id));
+  m.edges = (m.edges||[]).map(e=>{
+    const o=[String(e[0]),String(e[1])];
+    if(e[2] && PATH_STYLES[e[2]] && e[2]!=="trail") o.push(e[2]);
+    return o;
+  }).filter(e=>ids.has(e[0])&&ids.has(e[1])&&e[0]!==e[1]);
+  if(m.avatar.at && !ids.has(m.avatar.at)) m.avatar.at=null;
+  return m;
+}
+const M = () => MAPS[CUR];
+const nodeById = id => M().nodes.find(n=>n.id===id);
+
+function save(){ try{ localStorage.setItem(STORE, JSON.stringify({cur:CUR, maps:MAPS})); }catch(e){} }
+function load(){
+  try{
+    const raw = localStorage.getItem(STORE) || localStorage.getItem("pathforge_maps_v1");
+    if(raw){ const s = JSON.parse(raw); for(const k in s.maps) MAPS[k]=normMap(s.maps[k]); CUR = s.cur && MAPS[s.cur] ? s.cur : Object.keys(MAPS)[0]; }
+  }catch(e){}
+  if(!CUR){ MAPS.act1 = freshMap("act1","Act 1"); CUR = "act1"; genMap(MAPS.act1); }
+}
+function pushUndo(){
+  (UNDO[CUR] = UNDO[CUR]||[]).push(snap({nodes:M().nodes, edges:M().edges, nextId:M().nextId, floors:M().floors, avatar:M().avatar}));
+  if(UNDO[CUR].length>40) UNDO[CUR].shift();
+}
+function doUndo(){
+  const st = UNDO[CUR]; if(!st || !st.length) return;
+  const s = st.pop(); Object.assign(M(), s);
+  selNode = selEdge = linkFrom = null; PLAY = null; ANIM = null;
+  save(); render(); panel();
+}
+
+/* ============================================================
+   GEOMETRY
+   ============================================================ */
+const MARGIN = 70;
+function floorPos(m, f){
+  const F = Math.max(2, m.floors);
+  if(m.dir==="up")  return m.h - MARGIN - f*(m.h-2*MARGIN)/(F-1);
+  return MARGIN + f*(m.w-2*MARGIN)/(F-1);
+}
+function nearestFloor(m, x, y){
+  const v = m.dir==="up" ? y : x;
+  let best=0, bd=1e9;
+  for(let f=0; f<m.floors; f++){ const d=Math.abs(floorPos(m,f)-v); if(d<bd){bd=d; best=f;} }
+  return best;
+}
+function lanePos(m, lane, lanes){
+  const span = m.dir==="up" ? m.w : m.h;
+  return lanes<=1 ? span/2 : MARGIN + lane*(span-2*MARGIN)/(lanes-1);
+}
+function applySnap(m, n){
+  if(m.snapMode==="free"){ n.floor = nearestFloor(m,n.x,n.y); return; }
+  n.floor = nearestFloor(m, n.x, n.y);
+  const fp = floorPos(m, n.floor);
+  if(m.dir==="up") n.y = fp; else n.x = fp;
+  if(m.snapMode==="grid"){
+    const lanes = Math.max(2, m.gen.lanes);
+    let best=0, bd=1e9;
+    const v = m.dir==="up" ? n.x : n.y;
+    for(let l=0;l<lanes;l++){ const d=Math.abs(lanePos(m,l,lanes)-v); if(d<bd){bd=d;best=l;} }
+    if(m.dir==="up") n.x = lanePos(m,best,lanes); else n.y = lanePos(m,best,lanes);
+  }
+}
+function orderEdge(m, a, b){
+  const na=nodeById(a), nb=nodeById(b);
+  if(na.floor>nb.floor) return [b,a];
+  if(na.floor<nb.floor) return [a,b];
+  const va = m.dir==="up" ? -na.y : na.x, vb = m.dir==="up" ? -nb.y : nb.x;
+  return va<=vb ? [a,b] : [b,a];
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function el(tag, attrs, html){
+  const e = document.createElementNS(SVGNS, tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]);
+  if(html!==undefined) e.innerHTML = html;
+  return e;
+}
+function render(){
+  const m = M(), svg = $("board"), T = TER(m);
+  svg.setAttribute("viewBox", `0 0 ${m.w} ${m.h}`);
+  svg.innerHTML = "";
+
+  svg.appendChild(el("defs",{},
+    `<radialGradient id="terrg" cx="50%" cy="42%" r="78%">
+       <stop offset="0%" stop-color="${T.g[0]}"/><stop offset="70%" stop-color="${T.g[1]}"/><stop offset="100%" stop-color="${T.g[2]}"/>
+     </radialGradient>`));
+  svg.appendChild(el("rect",{x:14,y:14,width:m.w-28,height:m.h-28,rx:8,fill:"url(#terrg)",stroke:T.frame,"stroke-width":2}));
+  svg.appendChild(el("g",{}, terrainDeco(m)));
+  svg.appendChild(el("rect",{x:22,y:22,width:m.w-44,height:m.h-44,rx:5,fill:"none",stroke:T.frame,"stroke-width":1,"stroke-dasharray":"5 7",opacity:.45}));
+
+  if(m.guides==="on"){
+    const g = el("g",{opacity:.5});
+    for(let f=0; f<m.floors; f++){
+      const p = floorPos(m,f);
+      if(m.dir==="up"){
+        g.appendChild(el("line",{x1:34,y1:p,x2:m.w-34,y2:p,stroke:T.guide,"stroke-width":1,"stroke-dasharray":"2 9"}));
+        g.appendChild(el("text",{x:30,y:p+4,"font-size":13,fill:T.label,"font-family":"inherit"},String(f)));
+      }else{
+        g.appendChild(el("line",{x1:p,y1:34,x2:p,y2:m.h-34,stroke:T.guide,"stroke-width":1,"stroke-dasharray":"2 9"}));
+        g.appendChild(el("text",{x:p-4,y:30,"font-size":13,fill:T.label,"font-family":"inherit"},String(f)));
+      }
+    }
+    svg.appendChild(g);
+  }
+
+  /* edges */
+  const eg = el("g",{});
+  m.edges.forEach((e,i)=>{
+    const a=nodeById(e[0]), b=nodeById(e[1]); if(!a||!b) return;
+    const dx=b.x-a.x, dy=b.y-a.y, len=Math.hypot(dx,dy)||1;
+    const ra=TYPES[a.type].r+6, rb=TYPES[b.type].r+6;
+    const x1=a.x+dx/len*ra, y1=a.y+dy/len*ra, x2=b.x-dx/len*rb, y2=b.y-dy/len*rb;
+    const g = el("g",{});
+    let inner = "";
+    if(selEdge===i) inner += L([x1,y1,x2,y2],{stroke:"#8a5cf6","stroke-width":16,"stroke-linecap":"round",opacity:.35});
+    inner += edgeStyleMarkup(eStyle(e), x1,y1,x2,y2);
+    if(PLAY && pathHasEdge(e)) inner += L([x1,y1,x2,y2],{stroke:"#b07f2e","stroke-width":4,"stroke-linecap":"round","stroke-dasharray":"0.1 12",opacity:.9});
+    g.innerHTML = inner;
+    eg.appendChild(g);
+    const hit = el("line",{x1,y1,x2,y2,stroke:"rgba(0,0,0,0)","stroke-width":20,class:"edgehit"});
+    hit.dataset.edge = i;
+    eg.appendChild(hit);
+  });
+  svg.appendChild(eg);
+
+  rubber = el("line",{x1:0,y1:0,x2:0,y2:0,stroke:"#3fa7d6","stroke-width":3,"stroke-dasharray":"2 8","stroke-linecap":"round",visibility:"hidden"});
+  svg.appendChild(rubber);
+
+  /* nodes */
+  const ng = el("g",{});
+  for(const n of m.nodes){
+    const t = TYPES[n.type], s = t.r/10;
+    const g = el("g",{class:"node"+(selNode===n.id?" seln":""), transform:`translate(${n.x},${n.y}) scale(${s})`});
+    g.dataset.id = n.id;
+    let ring = "";
+    if(selNode===n.id) ring = `<circle r="14.5" fill="none" stroke="#8a5cf6" stroke-width="${2.4/s}" stroke-dasharray="4 4"/>`;
+    else if(linkFrom===n.id) ring = `<circle r="14.5" fill="none" stroke="#3fa7d6" stroke-width="${2.4/s}" stroke-dasharray="4 4"/>`;
+    else if(PLAY && PLAY.path.includes(n.id)) ring = `<circle r="13.5" fill="none" stroke="#b07f2e" stroke-width="${2.2/s}"/>`;
+    else if(PLAY && playChoices().includes(n.id)) ring = `<circle r="14.5" fill="none" stroke="#c8a86b" stroke-width="${2.6/s}" stroke-dasharray="3 3"/>`;
+    g.innerHTML = `<circle r="13.5" fill="rgba(0,0,0,0)"/>` + ring + iconMarkup(n.type, t.ink, T.paper);
+    if(n.label){
+      g.appendChild(el("text",{y:22,"text-anchor":"middle","font-size":10/s*1.0,fill:T.text,"font-family":"inherit"},esc(n.label)));
+    }
+    ng.appendChild(g);
+  }
+  svg.appendChild(ng);
+
+  /* avatar */
+  const av = m.avatar;
+  if(av.type!=="none" && (av.at || ANIM)){
+    let ax, ay;
+    if(ANIM){ [ax,ay]=animPos(); }
+    else { const n=nodeById(av.at); if(n){ ax=n.x; ay=n.y; } }
+    if(ax!==undefined){
+      const g = el("g",{id:"avatarg", transform:`translate(${ax},${ay})`});
+      g.innerHTML = `<ellipse cx="0" cy="11" rx="9" ry="3" fill="#000" opacity=".22"/>`+
+                    `<g id="avatarflip" transform="translate(0,-6)">${avatarMarkup(av.type)}</g>`;
+      svg.appendChild(g);
+    }
+  }
+
+  svg.classList.toggle("locked", mode==="move" && !!selNode);
+  $("svgwrap").classList.toggle("locked", mode==="move" && !!selNode);
+  svg.classList.toggle("linkdraw", mode==="link");
+  $("svgwrap").classList.toggle("linkdraw", mode==="link");
+  report();
+}
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ============================================================
+   REPORT / VALIDATION
+   ============================================================ */
+function entryNodes(m){
+  const has = new Set(m.edges.map(e=>e[1]));
+  const starts = m.nodes.filter(n=>n.type==="start");
+  if(starts.length) return starts.map(n=>n.id);
+  return m.nodes.filter(n=>!has.has(n.id)).map(n=>n.id);
+}
+function succ(m,id){ return m.edges.filter(e=>e[0]===id).map(e=>e[1]); }
+function segsCross(a,b,c,d){
+  const ccw=(p,q,r)=>(r[1]-p[1])*(q[0]-p[0])-(q[1]-p[1])*(r[0]-p[0]);
+  if(a[0]===c[0]&&a[1]===c[1]||a[0]===d[0]&&a[1]===d[1]||b[0]===c[0]&&b[1]===c[1]||b[0]===d[0]&&b[1]===d[1]) return false;
+  return ccw(a,c,d)*ccw(b,c,d)<0 && ccw(a,b,c)*ccw(a,b,d)<0;
+}
+function report(){
+  const m = M(), out = [];
+  const byType = {}; for(const n of m.nodes) byType[n.type]=(byType[n.type]||0)+1;
+  out.push(`<b>${esc(m.name)}</b> — ${m.nodes.length} nodes, ${m.edges.length} links · ` +
+    TYPE_KEYS.filter(t=>byType[t]).map(t=>`${TYPES[t].name.replace(" ?","")} ${byType[t]}`).join(" · "));
+
+  if(PLAY){
+    const names = PLAY.path.map(id=>{ const n=nodeById(id); return n ? (n.label||TYPES[n.type].name) : id; });
+    const walking = ANIM ? " — <i>walking…</i>" : "";
+    out.push(`<span style="color:#f0dfb8"><b style="color:#c8a86b">Play test:</b> ${names.length? names.join(" → ") : (m.avatar.type!=="none" && !m.avatar.at ? "tap a node to place the avatar" : "tap a starting node")}${walking}${PLAY.done?" — <b style='color:#8ecf6a'>route complete</b>":""}</span>`);
+  }
+
+  if(m.nodes.length){
+    const reach = new Set(entryNodes(m));
+    const q=[...reach];
+    while(q.length){ for(const s of succ(m,q.shift())) if(!reach.has(s)){reach.add(s); q.push(s);} }
+    const unreachable = m.nodes.filter(n=>!reach.has(n.id));
+    const maxF = Math.max(...m.nodes.map(n=>n.floor));
+    const dead = m.nodes.filter(n=>!succ(m,n.id).length && n.type!=="boss" && n.floor<maxF);
+    const skips = m.edges.filter(e=>{const a=nodeById(e[0]),b=nodeById(e[1]);return b.floor-a.floor>1;});
+    let cross=0;
+    for(let i=0;i<m.edges.length;i++) for(let j=i+1;j<m.edges.length;j++){
+      const a=nodeById(m.edges[i][0]),b=nodeById(m.edges[i][1]),c=nodeById(m.edges[j][0]),d=nodeById(m.edges[j][1]);
+      if(segsCross([a.x,a.y],[b.x,b.y],[c.x,c.y],[d.x,d.y])) cross++;
+    }
+    const probs=[];
+    if(unreachable.length) probs.push(`<span class="warn"><b style="color:#e3492b">${unreachable.length} unreachable</b> (${unreachable.slice(0,8).map(n=>n.id).join(", ")}${unreachable.length>8?"…":""})</span>`);
+    if(dead.length) probs.push(`<span class="warn"><b style="color:#e3492b">${dead.length} dead end${dead.length>1?"s":""}</b> before the top (${dead.slice(0,8).map(n=>n.id).join(", ")}${dead.length>8?"…":""})</span>`);
+    if(skips.length) probs.push(`${skips.length} link${skips.length>1?"s":""} skip a floor`);
+    if(cross) probs.push(`${cross} crossing link pair${cross>1?"s":""}`);
+    out.push(probs.length ? probs.join(" · ") : `<span class="ok"><b style="color:#8ecf6a">Map checks out</b> — every node reachable, no dead ends, no crossings.</span>`);
+  } else {
+    out.push(`Empty board — pick <b style="color:#c9f2e4">＋ Add nodes</b> and tap the terrain, or hit <b style="color:#d6f0fb">Generate map</b>.`);
+  }
+  $("report").innerHTML = out.join("<br>");
+}
+
+/* ============================================================
+   GENERATOR
+   ============================================================ */
+function genMap(m){
+  const G = m.gen, F = Math.max(3, m.floors), L2 = Math.max(2, G.lanes);
+  m.nodes = []; m.edges = []; m.nextId = 1; m.avatar.at = null;
+  const grid = {};
+  const styleTail = m.pathStyle!=="trail" ? [m.pathStyle] : [];
+  const mk = (f,l)=>{
+    const k=f+","+l; if(grid[k]) return grid[k];
+    const jitter = m.snapMode==="grid" ? 0 : (Math.random()*18-9);
+    const cross = lanePos(m,l,L2)+jitter, prog = floorPos(m,f);
+    const n = {id:"n"+(m.nextId++), type:"enemy", label:"", floor:f,
+               x:m.dir==="up"?cross:prog, y:m.dir==="up"?prog:cross, data:null};
+    grid[k]=n; m.nodes.push(n); return n;
+  };
+  const bossOn = !!G.boss, topWalk = bossOn ? F-2 : F-1;
+  const edgeKeys = new Set(), laneEdges = {};
+  for(let p=0;p<Math.max(1,G.paths);p++){
+    let lane = Math.floor(Math.random()*L2);
+    if(p===1){ let tries=0; while(grid["0,"+lane] && tries++<20) lane=Math.floor(Math.random()*L2); }
+    mk(0,lane);
+    for(let f=0; f<topWalk; f++){
+      const opts=[];
+      for(const d of [-1,0,1]){
+        const nl=lane+d; if(nl<0||nl>=L2) continue;
+        const list=laneEdges[f]||[];
+        if(list.some(([a,b])=> (a<lane&&b>nl)||(a>lane&&b<nl) )) continue;
+        opts.push(nl);
+      }
+      const nl = opts.length? opts[Math.floor(Math.random()*opts.length)] : lane;
+      (laneEdges[f]=laneEdges[f]||[]).push([lane,nl]);
+      const a=mk(f,lane), b=mk(f+1,nl);
+      const ek=a.id+">"+b.id;
+      if(!edgeKeys.has(ek)){ edgeKeys.add(ek); m.edges.push([a.id,b.id,...styleTail]); }
+      lane=nl;
+    }
+  }
+  const W = G.weights, pool = TYPE_KEYS.filter(t=>W[t]>0 && !["start","boss"].includes(t));
+  const parents = id => m.edges.filter(e=>e[1]===id).map(e=>m.nodes.find(x=>x.id===e[0]));
+  for(const n of m.nodes){
+    if(n.floor===0){ n.type="enemy"; continue; }
+    if(G.tfloor>=0 && n.floor===G.tfloor){ n.type="treasure"; continue; }
+    if(G.restpre && n.floor===topWalk){ n.type="rest"; continue; }
+    let t=null, tries=0;
+    while(tries++<30){
+      let tot=0; for(const k of pool) tot+= (k==="elite"||k==="rest") && n.floor<G.elmin ? 0 : W[k];
+      let r=Math.random()*tot;
+      for(const k of pool){ const w=(k==="elite"||k==="rest") && n.floor<G.elmin ? 0 : W[k]; if((r-=w)<0){ t=k; break; } }
+      if(!t) t="enemy";
+      if(["rest","merchant","elite"].includes(t) && parents(n.id).some(p=>p&&p.type===t)) { t=null; continue; }
+      break;
+    }
+    n.type = t||"enemy";
+  }
+  if(bossOn){
+    const prog = floorPos(m,F-1), mid = (m.dir==="up"?m.w:m.h)/2;
+    const boss = {id:"n"+(m.nextId++), type:"boss", label:"", floor:F-1,
+                  x:m.dir==="up"?mid:prog, y:m.dir==="up"?prog:mid, data:null};
+    m.nodes.push(boss);
+    for(const n of m.nodes) if(n.floor===topWalk && n.id!==boss.id) m.edges.push([n.id, boss.id, ...styleTail]);
+  }
+  if(G.start){
+    const prog = floorPos(m,0) + (m.dir==="up"? 46 : -46);
+    const mid = (m.dir==="up"?m.w:m.h)/2;
+    const st = {id:"n"+(m.nextId++), type:"start", label:"", floor:0,
+                x:m.dir==="up"?mid:prog, y:m.dir==="up"?prog:mid, data:null};
+    m.nodes.push(st);
+    for(const n of m.nodes) if(n.floor===0 && n.type!=="start") m.edges.push([st.id, n.id, ...styleTail]);
+  }
+}
+
+/* ============================================================
+   PLAY TEST + AVATAR TRAVEL
+   ============================================================ */
+function playChoices(){
+  const m=M(); if(!PLAY) return [];
+  if(m.avatar.type!=="none"){
+    if(!m.avatar.at) return entryNodes(m);
+    return succ(m, m.avatar.at);
+  }
+  if(!PLAY.path.length) return entryNodes(m);
+  if(PLAY.done) return [];
+  return succ(m, PLAY.path[PLAY.path.length-1]);
+}
+function pathHasEdge(e){
+  for(let i=0;i<PLAY.path.length-1;i++) if(PLAY.path[i]===e[0]&&PLAY.path[i+1]===e[1]) return true;
+  return false;
+}
+function route(m, from, to){
+  /* BFS shortest, forwards first; if no forward route, allow walking links either way */
+  for(const undirected of [false,true]){
+    const prev={[from]:null}, q=[from];
+    while(q.length){
+      const c=q.shift();
+      if(c===to){ const p=[]; let x=to; while(x!=null){p.unshift(x); x=prev[x];} return p; }
+      for(const e of m.edges){
+        if(e[0]===c && !(e[1] in prev)){ prev[e[1]]=c; q.push(e[1]); }
+        if(undirected && e[1]===c && !(e[0] in prev)){ prev[e[0]]=c; q.push(e[0]); }
+      }
+    }
+  }
+  return null;
+}
+function animPos(){
+  if(!ANIM) return [0,0];
+  const p=ANIM.pts, i=ANIM.seg;
+  const a=p[i], b=p[i+1]||a;
+  const seglen=Math.hypot(b[0]-a[0],b[1]-a[1])||1;
+  const t=Math.min(1, ANIM.dist/seglen);
+  return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, b[0]-a[0], b[1]-a[1]];
+}
+let lastTs=0;
+function animStep(ts){
+  if(!ANIM) return;
+  const m=M(), dt=Math.min(0.05,(ts-lastTs)/1000||0.016); lastTs=ts;
+  ANIM.dist += (m.avatar.speed||170)*dt;
+  let [x,y,dx,dy]=animPos();
+  const p=ANIM.pts;
+  while(ANIM.seg<p.length-1){
+    const a=p[ANIM.seg], b=p[ANIM.seg+1];
+    const seglen=Math.hypot(b[0]-a[0],b[1]-a[1])||1;
+    if(ANIM.dist<seglen) break;
+    ANIM.dist-=seglen; ANIM.seg++;
+    if(ANIM.seg<ANIM.route.length) {          /* arrived at an intermediate node */
+      const id=ANIM.route[ANIM.seg];
+      if(!PLAY || PLAY.path[PLAY.path.length-1]!==id) PLAY && PLAY.path.push(id);
+    }
+    [x,y,dx,dy]=animPos();
+  }
+  const g=document.getElementById("avatarg");
+  if(g){
+    g.setAttribute("transform",`translate(${x.toFixed(1)},${y.toFixed(1)})`);
+    const flip=document.getElementById("avatarflip");
+    if(flip){
+      let tf;
+      if(m.avatar.type==="car"){
+        /* rotate to the slope; when driving left, flip vertically first so the roof stays up */
+        const ang=Math.atan2(dy,dx), deg=(ang*180/Math.PI).toFixed(1);
+        tf=`translate(0,-6) rotate(${deg})${Math.cos(ang)<-0.01?" scale(1,-1)":""}`;
+      } else {
+        if(Math.abs(dx)>0.5) ANIM.face = dx<0?-1:1;      /* keep last facing on vertical stretches */
+        const bob=Math.abs(Math.sin(ts/110))*2.2;
+        tf=`translate(0,${(-6-bob).toFixed(1)}) scale(${ANIM.face||1},1)`;
+      }
+      flip.setAttribute("transform",tf);
+    }
+  }
+  if(ANIM.seg>=p.length-1){
+    const m2=M();
+    m2.avatar.at=ANIM.target;
+    if(PLAY){
+      if(PLAY.path[PLAY.path.length-1]!==ANIM.target) PLAY.path.push(ANIM.target);
+      if(!succ(m2,ANIM.target).length) PLAY.done=true;
+    }
+    ANIM=null; save(); render(); return;
+  }
+  requestAnimationFrame(animStep);
+}
+function walkTo(targetId){
+  const m=M();
+  if(m.avatar.type==="none") return false;
+  if(ANIM) return true;                       /* already travelling — ignore taps */
+  if(!m.avatar.at){                           /* first placement: just appear there */
+    m.avatar.at=targetId;
+    if(PLAY) PLAY.path=[targetId];
+    save(); render(); return true;
+  }
+  if(m.avatar.at===targetId) return true;
+  const r=route(m, m.avatar.at, targetId);
+  if(!r) return false;
+  const pts=r.map(id=>{const n=nodeById(id); return [n.x,n.y];});
+  ANIM={pts, route:r, seg:0, dist:0, target:targetId};
+  lastTs=performance.now();
+  if(PLAY && PLAY.path[PLAY.path.length-1]!==m.avatar.at) PLAY.path.push(m.avatar.at);
+  render();                                    /* draws the avatar group we animate */
+  requestAnimationFrame(animStep);
+  return true;
+}
+
+/* ============================================================
+   BOARD INTERACTION
+   ============================================================ */
+function boardPt(ev){
+  const svg=$("board"), p=svg.createSVGPoint();
+  p.x=ev.clientX; p.y=ev.clientY;
+  const q=p.matrixTransform(svg.getScreenCTM().inverse());
+  return [q.x,q.y];
+}
+function nodeAt(x,y){
+  const m=M(); let best=null,bd=1e9;
+  for(const n of m.nodes){ const d=Math.hypot(n.x-x,n.y-y); const r=TYPES[n.type].r+12; if(d<r&&d<bd){bd=d;best=n;} }
+  return best;
+}
+
+$("board").addEventListener("pointerdown", ev=>{
+  const [x,y]=boardPt(ev);
+  const hitEdge = ev.target.classList && ev.target.classList.contains("edgehit") ? +ev.target.dataset.edge : null;
+  const n = nodeAt(x,y);
+  const m = M();
+
+  if(mode==="move"){
+    if(n){
+      if(selNode===n.id){
+        drag = {id:n.id, dx:n.x-x, dy:n.y-y, moved:false, pushed:false};
+        $("board").setPointerCapture(ev.pointerId);
+        ev.preventDefault();
+      } else { selNode=n.id; selEdge=null; render(); panel(); }
+    } else if(hitEdge!==null){ selEdge=hitEdge; selNode=null; render(); panel(); }
+    else { if(selNode||selEdge!==null){ selNode=null; selEdge=null; render(); panel(); } }
+  }
+  else if(mode==="add"){
+    if(n){ selNode=n.id; selEdge=null; render(); panel(); return; }
+    pushUndo();
+    const nn={id:"n"+(m.nextId++), type:addType, label:"", floor:0, x:Math.round(x), y:Math.round(y), data:null};
+    applySnap(m,nn); m.nodes.push(nn); selNode=nn.id; selEdge=null;
+    save(); render(); panel();
+  }
+  else if(mode==="link"){
+    if(n){
+      if(linkFrom && linkFrom!==n.id){ makeLink(linkFrom, n.id); linkFrom=null; render(); }
+      else { linkFrom=n.id; drag={link:true, id:n.id}; $("board").setPointerCapture(ev.pointerId); render(); }
+      ev.preventDefault();
+    } else { linkFrom=null; render(); }
+    stat();
+  }
+  else if(mode==="erase"){
+    if(n){ pushUndo(); m.nodes=m.nodes.filter(z=>z.id!==n.id); m.edges=m.edges.filter(e=>e[0]!==n.id&&e[1]!==n.id);
+           if(m.avatar.at===n.id) m.avatar.at=null;
+           if(selNode===n.id) selNode=null; selEdge=null; save(); render(); panel(); }
+    else if(hitEdge!==null){ pushUndo(); m.edges.splice(hitEdge,1); selEdge=null; save(); render(); }
+  }
+  else if(mode==="play"){
+    if(!n) return;
+    if(m.avatar.type!=="none"){ walkTo(n.id); }
+    else if(playChoices().includes(n.id)){
+      PLAY.path.push(n.id);
+      if(!succ(m,n.id).length) PLAY.done=true;
+      render();
+    }
+  }
+});
+$("board").addEventListener("pointermove", ev=>{
+  if(!drag) return;
+  const [x,y]=boardPt(ev);
+  if(drag.link){
+    const a=nodeById(drag.id);
+    rubber.setAttribute("x1",a.x); rubber.setAttribute("y1",a.y);
+    rubber.setAttribute("x2",x);   rubber.setAttribute("y2",y);
+    rubber.setAttribute("visibility","visible");
+    return;
+  }
+  const n=nodeById(drag.id); if(!n) return;
+  if(!drag.pushed){ pushUndo(); drag.pushed=true; }
+  drag.moved=true;
+  n.x=Math.round(x+drag.dx); n.y=Math.round(y+drag.dy);
+  applySnap(M(),n);
+  render();
+});
+$("board").addEventListener("pointerup", ev=>{
+  if(!drag) return;
+  if(drag.link){
+    rubber.setAttribute("visibility","hidden");
+    const [x,y]=boardPt(ev); const n=nodeAt(x,y);
+    if(n && n.id!==drag.id){ makeLink(drag.id,n.id); linkFrom=null; }
+    drag=null; render(); stat(); return;
+  }
+  if(drag.moved){ save(); panel(); }
+  drag=null;
+});
+function makeLink(a,b){
+  const m=M(); const [f,t]=orderEdge(m,a,b);
+  if(m.edges.some(e=>e[0]===f&&e[1]===t)) return;
+  pushUndo();
+  const e=[f,t]; if(m.pathStyle!=="trail") e.push(m.pathStyle);
+  m.edges.push(e); save();
+}
+
+/* keyboard */
+document.addEventListener("keydown", ev=>{
+  if(ev.target.tagName==="INPUT"||ev.target.tagName==="TEXTAREA"||ev.target.tagName==="SELECT") return;
+  if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==="z"){ doUndo(); ev.preventDefault(); return; }
+  if(!selNode) return;
+  const n=nodeById(selNode); if(!n) return;
+  const step=ev.shiftKey?10:3;
+  if(ev.key==="Delete"||ev.key==="Backspace"){
+    pushUndo(); M().nodes=M().nodes.filter(z=>z.id!==selNode); M().edges=M().edges.filter(e=>e[0]!==selNode&&e[1]!==selNode);
+    if(M().avatar.at===selNode) M().avatar.at=null;
+    selNode=null; save(); render(); panel(); ev.preventDefault(); return;
+  }
+  const mv={ArrowLeft:[-step,0],ArrowRight:[step,0],ArrowUp:[0,-step],ArrowDown:[0,step]}[ev.key];
+  if(mv){ pushUndo(); n.x+=mv[0]; n.y+=mv[1]; n.floor=nearestFloor(M(),n.x,n.y); save(); render(); panel(); ev.preventDefault(); }
+});
+
+/* ============================================================
+   PANELS / UI
+   ============================================================ */
+function tabs(){
+  const t=$("tabs"); t.innerHTML="";
+  for(const k in MAPS){
+    const b=document.createElement("button");
+    b.textContent=MAPS[k].name; if(k===CUR) b.className="sel";
+    b.onclick=()=>{ CUR=k; selNode=selEdge=linkFrom=null; PLAY=null; ANIM=null; setMode("move"); save(); tabs(); render(); panel(); };
+    t.appendChild(b);
+  }
+  const nb=document.createElement("button");
+  nb.className="newmap"; nb.textContent="＋ New map";
+  nb.onclick=()=>{
+    let i=1; while(MAPS["map"+i]) i++;
+    const k="map"+i; MAPS[k]=freshMap(k,"Map "+i); CUR=k;
+    selNode=selEdge=linkFrom=null; PLAY=null; ANIM=null;
+    save(); tabs(); render(); panel();
+  };
+  t.appendChild(nb);
+}
+function palette(){
+  const p=$("palette"); p.innerHTML="";
+  if(mode==="add"){
+    for(const t of TYPE_KEYS){
+      const b=document.createElement("button");
+      b.className="tbtn"+(addType===t?" sel":"");
+      b.innerHTML = miniIcon(t)+esc(TYPES[t].name);
+      b.onclick=()=>{ addType=t; palette(); };
+      p.appendChild(b);
+    }
+  } else if(mode==="link"){
+    for(const s in PATH_STYLES){
+      const b=document.createElement("button");
+      b.className="tbtn linksel"+(M().pathStyle===s?" sel":"");
+      b.innerHTML = miniPath(s)+esc(PATH_STYLES[s].name);
+      b.onclick=()=>{ M().pathStyle=s; save(); palette(); panel(); };
+      p.appendChild(b);
+    }
+  }
+  p.classList.toggle("on", mode==="add"||mode==="link");
+}
+function legend(){
+  $("legend").innerHTML = TYPE_KEYS.map(t=>`<span>${miniIcon(t,18)}${esc(TYPES[t].name)}</span>`).join("")+
+    Object.keys(PATH_STYLES).map(s=>`<span>${miniPath(s,30)}${esc(PATH_STYLES[s].name)}</span>`).join("")+
+    `<span style="color:#8a8098">gold ring = play-test choice</span>`;
+}
+function setMode(m){
+  mode=m;
+  document.querySelectorAll("#modebar .pbtn").forEach(b=>b.classList.toggle("sel", b.dataset.m===m));
+  linkFrom=null; ANIM=null;
+  PLAY = m==="play" ? {path: M().avatar.at?[M().avatar.at]:[], done:false} : null;
+  palette(); render(); stat();
+}
+document.querySelectorAll("#modebar .pbtn").forEach(b=> b.onclick=()=>setMode(b.dataset.m));
+$("btnundo").onclick=doUndo;
+function stat(){
+  const av = M().avatar.type!=="none";
+  $("modestat").textContent = {
+    move:"tap = select · drag a selected node to move it",
+    add:"pick a type below, then tap the board",
+    link:linkFrom?"now tap the node to link to":"pick a surface below, then tap two nodes — or drag between them",
+    erase:"tap a node or a link to remove it",
+    play:av?"tap any node — the avatar walks the paths to it":"tap a bottom node, then follow the gold rings"
+  }[mode]||"";
+}
+
+function panel(){
+  const m=M();
+  $("m_name").value=m.name; $("m_key").value=m.key;
+  $("m_w").value=m.w; $("m_h").value=m.h;
+  $("m_terrain").innerHTML = Object.keys(TERRAINS).map(k=>`<option value="${k}"${m.terrain===k?" selected":""}>${TERRAINS[k].name}</option>`).join("");
+  $("m_pstyle").innerHTML = Object.keys(PATH_STYLES).map(k=>`<option value="${k}"${m.pathStyle===k?" selected":""}>${PATH_STYLES[k].name}</option>`).join("");
+  $("m_dir").value=m.dir; $("m_floors").value=m.floors;
+  $("m_snap").value=m.snapMode; $("m_guides").value=m.guides;
+  $("a_type").innerHTML = Object.keys(AVATARS).map(k=>`<option value="${k}"${m.avatar.type===k?" selected":""}>${AVATARS[k].name}</option>`).join("");
+  $("a_speed").value=m.avatar.speed; $("a_speedo").textContent=m.avatar.speed;
+  const G=m.gen;
+  $("g_lanes").value=G.lanes; $("g_paths").value=G.paths;
+  $("g_tfloor").value=G.tfloor; $("g_elmin").value=G.elmin;
+  $("g_restpre").checked=!!G.restpre; $("g_start").checked=!!G.start; $("g_boss").checked=!!G.boss;
+  weights();
+  nodePanel();
+}
+function weights(){
+  const G=M().gen, w=$("g_weights"); w.innerHTML="";
+  for(const t of ["enemy","event","merchant","rest","elite","treasure"]){
+    const lab=document.createElement("label"); lab.textContent=TYPES[t].name.replace(" ?","");
+    const r=document.createElement("input"); r.type="range"; r.min=0; r.max=60; r.value=G.weights[t];
+    const o=document.createElement("output"); o.textContent=G.weights[t];
+    r.oninput=()=>{ G.weights[t]=+r.value; o.textContent=r.value; save(); };
+    w.append(lab,r,o);
+  }
+}
+function nodePanel(){
+  const n=selNode?nodeById(selNode):null;
+  $("nodecard").style.display = n?"block":"none";
+  const es=$("e_style");
+  es.disabled = $("e_del").disabled = $("e_flip").disabled = selEdge===null;
+  if(selEdge!==null){
+    const e=M().edges[selEdge];
+    es.innerHTML = Object.keys(PATH_STYLES).map(k=>`<option value="${k}"${eStyle(e)===k?" selected":""}>${PATH_STYLES[k].name}</option>`).join("");
+  } else es.innerHTML = `<option>—</option>`;
+  if(!n){
+    $("nodehint").innerHTML = selEdge!==null
+      ? `Link <b>${esc(M().edges[selEdge][0])} → ${esc(M().edges[selEdge][1])}</b> selected — change its surface, flip it, or delete it below.`
+      : `Tap a node on the board to edit it here. While it's selected, drag it with one finger (the board won't scroll), or nudge it with the <b>arrow keys</b>. Tap a link to select the link instead.`;
+    return;
+  }
+  $("nodehint").innerHTML = `Drag it on the board, arrows nudge (<b>Shift</b> = bigger steps), <b>Delete</b> removes it.`;
+  $("n_id").value=n.id;
+  const sel=$("n_type"); sel.innerHTML=TYPE_KEYS.map(t=>`<option value="${t}"${n.type===t?" selected":""}>${esc(TYPES[t].name)}</option>`).join("");
+  $("n_label").value=n.label;
+  $("n_floor").value=n.floor;
+  $("n_x").value=n.x; $("n_y").value=n.y;
+  $("n_data").value = n.data==null ? "" : JSON.stringify(n.data);
+  $("n_walk").disabled = M().avatar.type==="none";
+}
+
+/* map card wiring */
+$("m_name").oninput=()=>{ M().name=$("m_name").value; save(); tabs(); report(); };
+$("m_key").oninput=()=>{
+  const nk=$("m_key").value.trim().toLowerCase().replace(/[^a-z0-9_]/g,"");
+  if(!nk||nk===CUR||MAPS[nk]) return;
+  MAPS[nk]=M(); delete MAPS[CUR]; MAPS[nk].key=nk;
+  UNDO[nk]=UNDO[CUR]; delete UNDO[CUR]; CUR=nk; save(); tabs();
+};
+$("m_w").onchange=()=>{ M().w=Math.max(400,+$("m_w").value||1000); save(); render(); };
+$("m_h").onchange=()=>{ M().h=Math.max(400,+$("m_h").value||1400); save(); render(); };
+$("m_terrain").onchange=()=>{ M().terrain=$("m_terrain").value; save(); render(); };
+$("m_pstyle").onchange=()=>{ M().pathStyle=$("m_pstyle").value; save(); palette(); };
+$("m_dir").onchange=()=>{ M().dir=$("m_dir").value; save(); render(); };
+$("m_floors").onchange=()=>{
+  M().floors=Math.max(2,+$("m_floors").value||16);
+  for(const n of M().nodes) n.floor=nearestFloor(M(),n.x,n.y);
+  save(); render();
+};
+$("m_snap").onchange=()=>{ M().snapMode=$("m_snap").value; save(); };
+$("m_guides").onchange=()=>{ M().guides=$("m_guides").value; save(); render(); };
+$("m_clear").onclick=()=>{
+  if(!M().nodes.length || confirm("Remove every node and link on this map?")){
+    pushUndo(); M().nodes=[]; M().edges=[]; M().nextId=1; M().avatar.at=null; selNode=selEdge=null; ANIM=null; save(); render(); panel();
+  }
+};
+$("m_delete").onclick=()=>{
+  const ks=Object.keys(MAPS);
+  if(ks.length<=1){ alert("That's the last map — make a new one first."); return; }
+  if(!confirm(`Remove "${M().name}" entirely?`)) return;
+  delete MAPS[CUR]; delete UNDO[CUR]; CUR=Object.keys(MAPS)[0];
+  selNode=selEdge=linkFrom=null; PLAY=null; ANIM=null;
+  save(); tabs(); render(); panel();
+};
+
+/* avatar card wiring */
+$("a_type").onchange=()=>{ M().avatar.type=$("a_type").value; ANIM=null; save(); render(); panel(); };
+$("a_speed").oninput=()=>{ M().avatar.speed=+$("a_speed").value; $("a_speedo").textContent=M().avatar.speed; save(); };
+$("a_place").onclick=()=>{
+  const m=M(); if(m.avatar.type==="none"){ alert("Pick an avatar first."); return; }
+  const ent=entryNodes(m); if(!ent.length){ alert("No nodes yet."); return; }
+  ANIM=null; m.avatar.at=ent[0];
+  if(PLAY) PLAY.path=[ent[0]];
+  save(); render();
+};
+$("a_remove").onclick=()=>{ ANIM=null; M().avatar.at=null; save(); render(); };
+
+/* generator wiring */
+["g_lanes","g_paths","g_tfloor","g_elmin"].forEach(id=>{
+  $(id).onchange=()=>{ const G=M().gen;
+    G.lanes=+$("g_lanes").value||7; G.paths=+$("g_paths").value||6;
+    G.tfloor=parseInt($("g_tfloor").value,10); if(isNaN(G.tfloor)) G.tfloor=-1;
+    G.elmin=+$("g_elmin").value||0; save(); };
+});
+["g_restpre","g_start","g_boss"].forEach(id=>{
+  $(id).onchange=()=>{ const G=M().gen; G.restpre=$("g_restpre").checked; G.start=$("g_start").checked; G.boss=$("g_boss").checked; save(); };
+});
+$("g_gen").onclick=()=>{
+  const G=M().gen;
+  G.lanes=+$("g_lanes").value||7; G.paths=+$("g_paths").value||6;
+  G.tfloor=parseInt($("g_tfloor").value,10); if(isNaN(G.tfloor)) G.tfloor=-1;
+  G.elmin=+$("g_elmin").value||0;
+  pushUndo(); ANIM=null; genMap(M()); selNode=selEdge=linkFrom=null;
+  save(); render(); panel();
+};
+
+/* node card wiring */
+$("n_type").onchange=()=>{ const n=nodeById(selNode); if(!n)return; pushUndo(); n.type=$("n_type").value; save(); render(); };
+$("n_label").oninput=()=>{ const n=nodeById(selNode); if(!n)return; n.label=$("n_label").value; save(); render(); };
+$("n_floor").onchange=()=>{ const n=nodeById(selNode); if(!n)return; pushUndo();
+  n.floor=Math.max(0,Math.min(M().floors-1,+$("n_floor").value||0));
+  const fp=floorPos(M(),n.floor); if(M().dir==="up") n.y=Math.round(fp); else n.x=Math.round(fp);
+  save(); render(); panel(); };
+$("n_x").onchange=()=>{ const n=nodeById(selNode); if(!n)return; pushUndo(); n.x=+$("n_x").value||0; n.floor=nearestFloor(M(),n.x,n.y); save(); render(); panel(); };
+$("n_y").onchange=()=>{ const n=nodeById(selNode); if(!n)return; pushUndo(); n.y=+$("n_y").value||0; n.floor=nearestFloor(M(),n.x,n.y); save(); render(); panel(); };
+$("n_data").onchange=()=>{
+  const n=nodeById(selNode); if(!n)return;
+  const v=$("n_data").value.trim();
+  if(!v){ n.data=null; save(); return; }
+  try{ n.data=JSON.parse(v); $("n_data").style.borderColor="#3a3247"; save(); }
+  catch(e){ $("n_data").style.borderColor="#e3492b"; }
+};
+$("n_walk").onclick=()=>{
+  const m=M(); if(!selNode) return;
+  if(m.avatar.type==="none"){ alert("Pick an avatar in the Avatar card first."); return; }
+  if(!walkTo(selNode)) alert("No path leads there from where the avatar is standing.");
+};
+$("n_dupe").onclick=()=>{
+  const n=nodeById(selNode); if(!n)return; pushUndo();
+  const c=snap(n); c.id="n"+(M().nextId++); c.x+=34; c.y+=34; applySnap(M(),c);
+  M().nodes.push(c); selNode=c.id; save(); render(); panel();
+};
+$("n_del").onclick=()=>{
+  if(!selNode)return; pushUndo();
+  M().nodes=M().nodes.filter(z=>z.id!==selNode); M().edges=M().edges.filter(e=>e[0]!==selNode&&e[1]!==selNode);
+  if(M().avatar.at===selNode) M().avatar.at=null;
+  selNode=null; save(); render(); panel();
+};
+$("e_style").onchange=()=>{
+  if(selEdge===null)return; pushUndo();
+  const e=M().edges[selEdge], s=$("e_style").value;
+  M().edges[selEdge] = s==="trail" ? [e[0],e[1]] : [e[0],e[1],s];
+  save(); render();
+};
+$("e_del").onclick=()=>{ if(selEdge===null)return; pushUndo(); M().edges.splice(selEdge,1); selEdge=null; save(); render(); panel(); };
+$("e_flip").onclick=()=>{ if(selEdge===null)return; pushUndo();
+  const e=M().edges[selEdge]; const s=e[2]; const f=[e[1],e[0]]; if(s)f.push(s);
+  M().edges[selEdge]=f; save(); render(); panel(); };
+
+/* ============================================================
+   EXPORT / IMPORT
+   ============================================================ */
+function mapJSON(m){
+  return {key:m.key, name:m.name, w:m.w, h:m.h, dir:m.dir, floors:m.floors,
+    terrain:m.terrain, pathStyle:m.pathStyle,
+    avatar:{type:m.avatar.type, at:m.avatar.at, speed:m.avatar.speed},
+    nodes:m.nodes.map(n=>{
+      const o={id:n.id, type:n.type, floor:n.floor, x:n.x, y:n.y};
+      if(n.label) o.label=n.label; if(n.data!=null) o.data=n.data; return o;
+    }),
+    edges:m.edges.map(e=> e[2] ? [e[0],e[1],e[2]] : [e[0],e[1]])};
+}
+function showBox(txt){ const b=$("exportbox"); b.style.display="block"; b.value=txt; }
+$("x_json").onclick=()=>showBox(JSON.stringify(mapJSON(M()),null,1));
+$("x_js").onclick=()=>{
+  const m=M(), cname="MAP_"+m.key.toUpperCase();
+  showBox(`/* ${m.name} — generated by Pathforge, ${new Date().toISOString().slice(0,10)}\n   nodes: {id,type,floor,x,y,label?,data?} · edges: [fromId,toId,surface?] pointing start → boss\n   surfaces: trail (default) | road | rail | dirt | brick | stairs | ladder */\nconst ${cname} = ${JSON.stringify(mapJSON(m))};\n`);
+};
+$("x_copy").onclick=()=>{
+  const b=$("exportbox");
+  if(b.style.display==="none") $("x_json").onclick();
+  b.select(); document.execCommand("copy");
+  if(navigator.clipboard) navigator.clipboard.writeText(b.value).catch(()=>{});
+};
+$("x_dl").onclick=()=>{
+  const blob=new Blob([JSON.stringify(mapJSON(M()),null,1)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=M().key+".json"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+};
+$("x_pick").onclick=()=>$("x_file").click();
+$("x_file").onchange=ev=>{
+  const f=ev.target.files[0]; if(!f)return;
+  const r=new FileReader(); r.onload=()=>importText(r.result); r.readAsText(f);
+  ev.target.value="";
+};
+$("x_frombox").onclick=()=>importText($("exportbox").value);
+function importText(txt){
+  let d; try{ d=JSON.parse(txt); }catch(e){ alert("That isn't valid JSON: "+e.message); return; }
+  const list = d.maps ? Object.values(d.maps) : (d.nodes ? [d] : null);
+  if(!list){ alert("Expected a map ({nodes,edges,…}) or a bundle ({maps:{…}})."); return; }
+  let last=null;
+  for(const raw of list){
+    let k=(raw.key||"imported").toLowerCase().replace(/[^a-z0-9_]/g,"")||"imported";
+    while(MAPS[k]) k=k+"_2";
+    raw.key=k;
+    raw.nextId = 1 + Math.max(0,...(raw.nodes||[]).map(n=>parseInt(String(n.id).replace(/\D/g,""),10)||0));
+    MAPS[k]=normMap(raw); last=k;
+  }
+  if(last){ CUR=last; selNode=selEdge=linkFrom=null; PLAY=null; ANIM=null; save(); tabs(); render(); panel(); }
+}
+$("x_png").onclick=()=>{
+  const m=M(), svg=$("board");
+  const xml=new XMLSerializer().serializeToString(svg);
+  const img=new Image();
+  img.onload=()=>{
+    const c=document.createElement("canvas"); c.width=m.w; c.height=m.h;
+    const ctx=c.getContext("2d"); ctx.fillStyle="#2a2620"; ctx.fillRect(0,0,m.w,m.h);
+    ctx.drawImage(img,0,0,m.w,m.h);
+    const a=document.createElement("a"); a.href=c.toDataURL("image/png"); a.download=m.key+".png"; a.click();
+  };
+  img.onerror=()=>alert("PNG export failed.");
+  img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(xml);
+};
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+load(); tabs(); legend(); palette(); render(); panel(); stat();
+</script>
+</body>
+</html>

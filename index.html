@@ -1882,6 +1882,17 @@ $("g_gen").onclick=()=>{
   save(); render(); panel();
 };
 
+      ["g_rows","g_cols"].forEach(id=>{ $(id).onchange=()=>{ const G=M().gen;
+  G.rows=Math.max(2,Math.min(30,+$("g_rows").value||6)); G.cols=Math.max(2,Math.min(30,+$("g_cols").value||6));
+  $("g_rows").value=G.rows; $("g_cols").value=G.cols; save(); }; });
+$("g_diag").onchange=()=>{ M().gen.diag=$("g_diag").checked; save(); };
+$("g_grid").onclick=()=>{
+  const G=M().gen;
+  G.rows=Math.max(2,Math.min(30,+$("g_rows").value||6)); G.cols=Math.max(2,Math.min(30,+$("g_cols").value||6)); G.diag=$("g_diag").checked;
+  pushUndo(); ANIM=null; genGrid(M()); selNode=selEdge=linkFrom=null;
+  save(); render(); panel();
+};
+
 /* node card wiring */
 $("n_type").onchange=()=>{ const n=nodeById(selNode); if(!n)return; pushUndo(); n.type=$("n_type").value;
   if(n.type==="emoji" && !n.emoji) n.emoji=(M().gen.emoji||"⭐"); save(); render(); nodePanel(); };

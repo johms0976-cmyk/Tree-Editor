@@ -437,7 +437,8 @@ const PATH_STYLES = {
   dirt:   {name:"Dirt path"},
   brick:  {name:"Brick path"},
   stairs: {name:"Stairs"},
-  ladder: {name:"Ladder"}
+  ladder: {name:"Ladder"},
+  vine:   {name:"Vine Path"} 
 };
 const eStyle = e => (e[2] && PATH_STYLES[e[2]]) ? e[2] : "trail";
 
@@ -480,6 +481,21 @@ function edgeStyleMarkup(style,x1,y1,x2,y2){
       return L(offLine(x1,y1,x2,y2,-4),{stroke:"#7a5c33","stroke-width":2.4})+
              L(offLine(x1,y1,x2,y2, 4),{stroke:"#7a5c33","stroke-width":2.4})+
              `<path d="${perpTicks(x1,y1,x2,y2,8,4)}" stroke="#7a5c33" stroke-width="2.2" fill="none"/>`;
+        case "vine":
+              return   <path
+    d="M 20 170 C 80 140 140 130 200 110 C 260 90 320 80 380 60"
+    fill="none"
+    stroke="#4CAF50"
+    stroke-width="4"
+    stroke-linecap="round"
+  />
+
+  <!-- Leaves along the path -->
+  <circle cx="80" cy="145" r="3" fill="#66BB6A" />
+  <circle cx="150" cy="125" r="3" fill="#66BB6A" />
+  <circle cx="220" cy="105" r="3" fill="#66BB6A" />
+  <circle cx="300" cy="85" r="3" fill="#66BB6A" />;
+
     default: /* trail */
       return L(c,{stroke:"#4b4a58","stroke-width":3.5,"stroke-linecap":"round","stroke-dasharray":"0.1 11",opacity:.9});
   }
